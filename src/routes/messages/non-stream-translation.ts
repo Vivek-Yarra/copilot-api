@@ -1,3 +1,6 @@
+import consola from "consola"
+
+import { state } from "~/lib/state"
 import {
   type ChatCompletionResponse,
   type ChatCompletionsPayload,
@@ -46,14 +49,31 @@ export function translateToOpenAI(
   }
 }
 
+const FAMILY_FALLBACK: Record<string, string> = {
+  opus: "claude-opus-5.5",
+  sonnet: "claude-sonnet-5.5",
+  haiku: "claude-haiku-5.5",
+}
+
+// Map Claude Code model IDs (e.g. claude-opus-5-5[1m], claude-haiku-4-5-20251001)
+// onto the IDs Copilot exposes (claude-opus-5.5, claude-haiku-4.5, ...)
 function translateModelName(model: string): string {
-  // Subagent requests use a specific model number which Copilot doesn't support
-  if (model.startsWith("claude-sonnet-4-")) {
-    return model.replace(/^claude-sonnet-4-.*/, "claude-sonnet-4")
-  } else if (model.startsWith("claude-opus-")) {
-    return model.replace(/^claude-opus-4-.*/, "claude-opus-4")
+  const ids = state.models?.data.map((m) => m.id) ?? []
+  if (ids.includes(model)) return model
+
+  let mapped = model
+    .replace(/\[.*\]$/, "")
+    .replace(/-\d{8}$/, "")
+    .replace(/^(claude-(?:opus|sonnet|haiku)-\d+)-(\d+)$/, "$1.$2")
+
+  if (!ids.includes(mapped)) {
+    const family = /opus|sonnet|haiku/.exec(mapped)?.[0]
+    const fallback = family ? FAMILY_FALLBACK[family] : undefined
+    if (fallback && ids.includes(fallback)) mapped = fallback
   }
-  return model
+
+  if (mapped !== model) consola.info(`Model ${model} -> ${mapped}`)
+  return mapped
 }
 
 function translateAnthropicMessagesToOpenAI(
@@ -67,6 +87,15 @@ function translateAnthropicMessagesToOpenAI(
       handleUserMessage(message)
     : handleAssistantMessage(message),
   )
+
+  // Copilot rejects assistant prefill, so drop trailing assistant messages without tool calls
+  while (
+    otherMessages.length > 0
+    && otherMessages.at(-1)?.role === "assistant"
+    && !otherMessages.at(-1)?.tool_calls
+  ) {
+    otherMessages.pop()
+  }
 
   return [...systemMessages, ...otherMessages]
 }
