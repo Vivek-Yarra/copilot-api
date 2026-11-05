@@ -154,6 +154,7 @@ The following command line options are available for the `start` command:
 | Option         | Description                                                                   | Default    | Alias |
 | -------------- | ----------------------------------------------------------------------------- | ---------- | ----- |
 | --port         | Port to listen on                                                             | 4141       | -p    |
+| --host         | Address to listen on (use `0.0.0.0` to expose the proxy to your network)      | 127.0.0.1  | -H    |
 | --verbose      | Enable verbose logging                                                        | false      | -v    |
 | --account-type | Account type to use (individual, business, enterprise)                        | individual | -a    |
 | --manual       | Enable manual request approval                                                | false      | none  |
@@ -300,17 +301,18 @@ Paste and run this command in a new terminal to launch Claude Code.
 
 Alternatively, you can configure Claude Code by creating a `.claude/settings.json` file in your project's root directory. This file should contain the environment variables needed by Claude Code. This way you don't need to run the interactive setup every time.
 
-Here is an example `.claude/settings.json` file:
+Here is an example `.claude/settings.json` file (also available as [`examples/claude-code-settings.json`](examples/claude-code-settings.json)). It can also go in `~/.claude/settings.json` to apply to every project:
 
 ```json
 {
   "env": {
     "ANTHROPIC_BASE_URL": "http://localhost:4141",
     "ANTHROPIC_AUTH_TOKEN": "dummy",
-    "ANTHROPIC_MODEL": "gpt-4.1",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "gpt-4.1",
-    "ANTHROPIC_SMALL_FAST_MODEL": "gpt-4.1",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "gpt-4.1",
+    "ANTHROPIC_MODEL": "claude-opus-5.5",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5.5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5.5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-5.5",
+    "ANTHROPIC_SMALL_FAST_MODEL": "claude-haiku-5.5",
     "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
   },
@@ -321,6 +323,8 @@ Here is an example `.claude/settings.json` file:
   }
 }
 ```
+
+Use model IDs from your own `GET /v1/models` list. Claude Code model IDs such as `claude-opus-5-5[1m]` or dated IDs are mapped to the closest Copilot model automatically, so picking a model with `/model` works too. `WebSearch` is denied because it is a server-side Anthropic tool that Copilot does not provide.
 
 You can find more options here: [Claude Code settings](https://docs.anthropic.com/en/docs/claude-code/settings#environment-variables)
 
