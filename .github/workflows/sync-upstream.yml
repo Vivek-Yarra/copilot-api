@@ -1,0 +1,128 @@
+name: Sync upstream
+
+# Weekly: merge ericc-ch/copilot-api master into this fork's branch.
+# Clean merges that pass lint/typecheck/tests/build are opened as a PR;
+# merge conflicts or failing checks are reported as an issue instead.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1" # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+env:
+  UPSTREAM: https://github.com/ericc-ch/copilot-api.git
+  UPSTREAM_BRANCH: master
+  TARGET_BRANCH: claude-code-fixes
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_BRANCH }}
+          fetch-depth: 0
+
+      - name: Fetch upstream
+        id: fetch
+        run: |
+          git remote add upstream "$UPSTREAM"
+          git fetch upstream "$UPSTREAM_BRANCH"
+          sha=$(git rev-parse --short "upstream/$UPSTREAM_BRANCH")
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "branch=sync/upstream-$sha" >> "$GITHUB_OUTPUT"
+          if git merge-base --is-ancestor "upstream/$UPSTREAM_BRANCH" HEAD; then
+            echo "Already up to date with upstream ($sha)"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          elif git ls-remote --exit-code --heads origin "sync/upstream-$sha" >/dev/null; then
+            echo "A sync branch for upstream $sha already exists"
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Merge upstream
+        id: merge
+        if: steps.fetch.outputs.needed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "${{ steps.fetch.outputs.branch }}"
+          if git merge --no-edit "upstream/$UPSTREAM_BRANCH"; then
+            echo "conflict=false" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "files<<EOF"
+              git diff --name-only --diff-filter=U
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            git merge --abort
+            echo "conflict=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Report merge conflict
+        if: steps.merge.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FILES: ${{ steps.merge.outputs.files }}
+        run: |
+          title="Upstream sync conflict (upstream ${{ steps.fetch.outputs.sha }})"
+          if gh issue list --state open --search "$title in:title" --json number --jq '.[0].number' | grep -q .; then
+            echo "Issue already open"; exit 0
+          fi
+          gh issue create --title "$title" --body "$(cat <<EOF
+          Merging \`upstream/$UPSTREAM_BRANCH\` (${{ steps.fetch.outputs.sha }}) into \`$TARGET_BRANCH\` has conflicts in:
+
+          \`\`\`
+          $FILES
+          \`\`\`
+
+          Resolve locally:
+          \`\`\`
+          git fetch upstream && git checkout $TARGET_BRANCH && git merge upstream/$UPSTREAM_BRANCH
+          \`\`\`
+          EOF
+          )"
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.merge.outputs.conflict == 'false'
+        with:
+          bun-version: latest
+
+      - name: Check merged code
+        id: checks
+        if: steps.merge.outputs.conflict == 'false'
+        continue-on-error: true
+        run: |
+          bun install
+          bun run lint:all
+          bun run typecheck
+          bun test
+          bun run build
+
+      - name: Open pull request
+        if: steps.merge.outputs.conflict == 'false' && steps.checks.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin "${{ steps.fetch.outputs.branch }}"
+          gh pr create \
+            --base "$TARGET_BRANCH" \
+            --head "${{ steps.fetch.outputs.branch }}" \
+            --title "Sync upstream ${{ steps.fetch.outputs.sha }}" \
+            --body "Merges \`upstream/$UPSTREAM_BRANCH\` (${{ steps.fetch.outputs.sha }}) into \`$TARGET_BRANCH\`. Lint, typecheck, tests and build passed on the merged code."
+
+      - name: Report failing checks
+        if: steps.merge.outputs.conflict == 'false' && steps.checks.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git push origin "${{ steps.fetch.outputs.branch }}"
+          gh issue create \
+            --title "Upstream sync breaks checks (upstream ${{ steps.fetch.outputs.sha }})" \
+            --body "Upstream merged cleanly into branch \`${{ steps.fetch.outputs.branch }}\`, but lint/typecheck/tests/build failed. See ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
