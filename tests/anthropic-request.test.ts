@@ -140,6 +140,8 @@ describe("Anthropic to OpenAI translation logic", () => {
             { type: "text", text: "2+2 equals 4." },
           ],
         },
+        // a trailing assistant message would be dropped as prefill
+        { role: "user", content: "And 3+3?" },
       ],
       max_tokens: 100,
     }

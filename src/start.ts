@@ -9,7 +9,7 @@ import invariant from "tiny-invariant"
 import { ensurePaths } from "./lib/paths"
 import { initProxyFromEnv } from "./lib/proxy"
 import { generateEnvScript } from "./lib/shell"
-import { state } from "./lib/state"
+import { parseModelFallback, state } from "./lib/state"
 import { setupCopilotToken, setupGitHubToken } from "./lib/token"
 import { cacheModels, cacheVSCodeVersion } from "./lib/utils"
 import { server } from "./server"
@@ -26,6 +26,7 @@ interface RunServerOptions {
   claudeCode: boolean
   showToken: boolean
   proxyEnv: boolean
+  modelFallback?: string
 }
 
 export async function runServer(options: RunServerOptions): Promise<void> {
@@ -47,6 +48,7 @@ export async function runServer(options: RunServerOptions): Promise<void> {
   state.rateLimitSeconds = options.rateLimit
   state.rateLimitWait = options.rateLimitWait
   state.showToken = options.showToken
+  state.modelFallback = parseModelFallback(options.modelFallback)
 
   await ensurePaths()
   await cacheVSCodeVersion()
@@ -193,6 +195,11 @@ export const start = defineCommand({
       default: false,
       description: "Initialize proxy from environment variables",
     },
+    "model-fallback": {
+      type: "string",
+      description:
+        "Copilot model per family when a Claude model ID has no exact match, e.g. opus=claude-opus-5.5,haiku=claude-haiku-4.5 (env: COPILOT_MODEL_FALLBACK)",
+    },
   },
   run({ args }) {
     const rateLimitRaw = args["rate-limit"]
@@ -212,6 +219,9 @@ export const start = defineCommand({
       claudeCode: args["claude-code"],
       showToken: args["show-token"],
       proxyEnv: args["proxy-env"],
+      modelFallback:
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+        args["model-fallback"] ?? process.env.COPILOT_MODEL_FALLBACK,
     })
   },
 })

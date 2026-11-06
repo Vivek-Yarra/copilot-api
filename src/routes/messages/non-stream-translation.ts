@@ -49,15 +49,9 @@ export function translateToOpenAI(
   }
 }
 
-const FAMILY_FALLBACK: Record<string, string> = {
-  opus: "claude-opus-5.5",
-  sonnet: "claude-sonnet-5.5",
-  haiku: "claude-haiku-5.5",
-}
-
 // Map Claude Code model IDs (e.g. claude-opus-5-5[1m], claude-haiku-4-5-20251001)
 // onto the IDs Copilot exposes (claude-opus-5.5, claude-haiku-4.5, ...)
-function translateModelName(model: string): string {
+export function translateModelName(model: string): string {
   const ids = state.models?.data.map((m) => m.id) ?? []
   if (ids.includes(model)) return model
 
@@ -68,7 +62,7 @@ function translateModelName(model: string): string {
 
   if (!ids.includes(mapped)) {
     const family = /opus|sonnet|haiku/.exec(mapped)?.[0]
-    const fallback = family ? FAMILY_FALLBACK[family] : undefined
+    const fallback = family ? state.modelFallback[family] : undefined
     if (fallback && ids.includes(fallback)) mapped = fallback
   }
 

@@ -164,6 +164,11 @@ The following command line options are available for the `start` command:
 | --claude-code  | Generate a command to launch Claude Code with Copilot API config              | false      | -c    |
 | --show-token   | Show GitHub and Copilot tokens on fetch and refresh                           | false      | none  |
 | --proxy-env    | Initialize proxy from environment variables                                   | false      | none  |
+| --model-fallback | Copilot model per family when a Claude model ID has no exact match, e.g. `opus=claude-opus-5.5,haiku=claude-haiku-4.5`. Also read from `COPILOT_MODEL_FALLBACK` | `opus=claude-opus-5.5,sonnet=claude-sonnet-5.5,haiku=claude-haiku-5.5` | none |
+
+Requests that fail upstream with 429 or 5xx (or a network error) are retried up to 3 times with exponential backoff, honouring `Retry-After`.
+
+Each upstream request is tagged `X-Initiator: user` when the conversation ends with a message the user typed, and `agent` when it continues an assistant turn or a tool call. Copilot uses this to decide which requests count as premium requests.
 
 ### Auth Command Options
 
